@@ -2,6 +2,8 @@
 using RabbitConsumer;
 using System.Net.Http.Headers;
 using System.Text;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 Console.WriteLine("Application Started.!");
 
@@ -10,7 +12,23 @@ client.DefaultRequestHeaders.Accept.Clear();
 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
 client.DefaultRequestHeaders.Add("User-Agent", ".NET Foundation Repository Reporter");
 
-await ConsumeFilms(client);
+var factory = new ConnectionFactory() { HostName = "localhost", UserName = "guest", Password = "guest" };
+using (IConnection connection = factory.CreateConnection())
+using (IModel channel = connection.CreateModel())
+{
+    var consumer = new EventingBasicConsumer(channel);
+    channel.BasicConsume(queue: "FilmQueue", autoAck: true, consumer: consumer);
+    consumer.Received += (model, ea) =>
+    {
+        var body = ea.Body.ToArray();
+        var message = Encoding.UTF8.GetString(body);
+        ConsumeFilms(client).GetAwaiter().GetResult();
+        Console.WriteLine(message);
+    };
+
+    Console.ReadLine();
+}
+
 
 static async Task ConsumeFilms(HttpClient client)
 {
